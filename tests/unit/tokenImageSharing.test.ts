@@ -59,3 +59,13 @@ it('reads art shared by several statblocks once, so its conversions are shared t
   expect(images[2]!.file).not.toBe(images[0]!.file);
   expect(readBinary).toHaveBeenCalledTimes(2);
 });
+
+it('hands a finished token to the creator without a ring', async () => {
+  const { app } = createInMemoryApp({ files: { 'Art/wolf.webp': 'art', 'Tokens/wolf.webp': 'token' } });
+  const rows = [
+    { name: 'Wolf', path: 'Bestiary/Wolf.md', imagePath: 'Tokens/wolf.webp', finishedToken: true, status: 'ready' as const, detail: 'Ready' },
+    { name: 'Dire Wolf', path: 'Bestiary/Dire Wolf.md', imagePath: 'Art/wolf.webp', status: 'ready' as const, detail: 'Ready' },
+  ];
+  const images = await statblockPreviewImages(app, rows, new AbortController().signal);
+  expect(images.map(i => i.showRing)).toEqual([false, undefined]);
+});

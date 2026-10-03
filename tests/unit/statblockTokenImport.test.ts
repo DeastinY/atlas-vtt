@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TFile } from 'obsidian';
 import { StatblockTokenImportService } from '../../src/app/services/StatblockTokenImportService';
+import { statblockImportCandidate } from '../../src/app/services/statblockImportCandidates';
 import { AssetService } from '../../src/app/services/AssetService';
 import { TokenStatblockLinkService } from '../../src/app/services/TokenStatblockLinkService';
+import { SettingsService } from '../../src/app/services/SettingsService';
 import { createInMemoryApp } from '../mocks/inMemoryVault';
 
 // Workers and canvases do not exist in jsdom; the conversion itself is covered by the image pipeline's tests.
@@ -107,6 +109,41 @@ describe('bulk importing recognized statblock notes', () => {
     const rows = await new StatblockTokenImportService(app, assets).scan();
     expect(rows.find(r => r.path === note)).toMatchObject({ status: 'ready', imagePath: 'Artwork/token.webp' });
     expect(rows.find(r => r.path === 'Both.md')).toMatchObject({ status: 'ready', imagePath: image });
+  });
+
+  it('creates a `token` image whole and without a ring, before `image`, when finished tokens are preferred', async () => {
+    const { app, files, frontmatter, assets } = setup();
+    new SettingsService(app).setSetting('preferTokenField', true);
+    files.set('Artwork/token.webp', 'image-bytes');
+    frontmatter[note] = { statblock: true, name: 'Goblin', image, token: '[[Artwork/token.webp]]' };
+    files.set('Gone.md', 'gone');
+    frontmatter['Gone.md'] = { statblock: true, name: 'Gone', image, token: 'Artwork/missing.webp' };
+    files.set('Remote.md', 'remote');
+    frontmatter['Remote.md'] = { statblock: true, name: 'Remote', image, token: 'https://example.com/token.webp' };
+    const importer = new StatblockTokenImportService(app, assets);
+    const rows = await importer.scan();
+    expect(rows.find(r => r.path === note)).toMatchObject({ status: 'ready', imagePath: 'Artwork/token.webp', finishedToken: true });
+    // A token property that names no vault image falls back to the artwork.
+    for (const path of ['Gone.md', 'Remote.md']) {
+      expect(rows.find(r => r.path === path)).toMatchObject({ status: 'ready', imagePath: image });
+      expect(rows.find(r => r.path === path)?.finishedToken).toBeUndefined();
+    }
+
+    const result = await importer.import([note, 'Gone.md'], 'Default', { ringByPath: { [note]: true, 'Gone.md': true } });
+    expect(result.items.map(i => i.status)).toEqual(['created', 'created']);
+    expect(convert.mock.calls.map(([file, framed]: [File, boolean]) => [file.name, framed])).toEqual([['token.webp', false], ['goblin.webp', true]]);
+    expect((await assets.getTokenAssets()).map(t => [t.statblockPath, t.showRing])).toEqual([[note, false], ['Gone.md', true]]);
+  });
+
+  it('keeps reading `image` first while finished tokens are not preferred', async () => {
+    const { app, files, frontmatter, assets } = setup();
+    files.set('Artwork/token.webp', 'image-bytes');
+    frontmatter[note] = { statblock: true, name: 'Goblin', image, token: 'Artwork/token.webp' };
+    const lookup = { creatures: new Map(), tokens: new Map() };
+    expect(await statblockImportCandidate(app, new TFile(note), lookup, { preferTokenField: false })).toMatchObject({ imagePath: image });
+    expect(await statblockImportCandidate(app, new TFile(note), lookup, { preferTokenField: true })).toMatchObject({ imagePath: 'Artwork/token.webp', finishedToken: true });
+    const rows = await new StatblockTokenImportService(app, assets).scan();
+    expect(rows.find(r => r.path === note)?.finishedToken).toBeUndefined();
   });
 
   it('decodes the link encoding Fantasy Statblocks applies to bestiary images', async () => {

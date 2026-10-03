@@ -52,6 +52,8 @@ export interface AtlasSettings {
   diceFont: DiceFont;
   /** Game system presets the user saved, as stored; `SystemPresetService` validates them. */
   systemPresets: unknown[];
+  /** Statblock imports create a note's `token` image whole and without the Atlas ring, before its `image`. */
+  preferTokenField: boolean;
   /** Experimental features the GM switched on. Read with `isExperimentalOn`. */
   experimental: Partial<Record<ExperimentalFeatureId, boolean>>;
   localPlayerView: {
@@ -82,6 +84,7 @@ const DEFAULT_SETTINGS: AtlasSettings = {
   diceColour: DEFAULT_DICE_LOOK.colour,
   diceFont: DEFAULT_DICE_LOOK.font,
   systemPresets: [],
+  preferTokenField: false,
   experimental: {},
   localPlayerView: {
     // UI element visibility defaults

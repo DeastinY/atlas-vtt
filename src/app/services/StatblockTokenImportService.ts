@@ -115,10 +115,12 @@ export class StatblockTokenImportService {
       name = row.name;
       const image = this.app.vault.getAbstractFileByPath(row.imagePath);
       if (!(image instanceof TFile)) return { item: { path, name, status: 'skipped', message: 'The source image no longer exists.' } };
-      const converted = convertTokenArt(await vaultImageFile(this.app, image), showRing, signal);
+      // A finished token brings its own frame.
+      const ring = row.finishedToken ? false : showRing;
+      const converted = convertTokenArt(await vaultImageFile(this.app, image), ring, signal);
       // Failures surface when the note is registered; notes never reached must not raise unhandled rejections.
       converted.catch(() => undefined);
-      return { path, name, showRing, converted };
+      return { path, name, showRing: ring, converted };
     } catch (error) {
       return { item: { path, name, status: 'failed', message: error instanceof Error ? error.message : 'Could not create this token.' } };
     }

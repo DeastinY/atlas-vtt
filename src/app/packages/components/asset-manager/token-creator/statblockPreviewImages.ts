@@ -20,7 +20,12 @@ export async function statblockPreviewImages(
       image = await vaultImageFile(app, file);
       read.set(file.path, image);
     }
-    images.push({ file: image, name: row.name, statblockPath: row.path, ...(row.size !== undefined && { size: row.size }) });
+    images.push({
+      file: image, name: row.name, statblockPath: row.path,
+      ...(row.size !== undefined && { size: row.size }),
+      // A finished token brings its own frame.
+      ...(row.finishedToken && { showRing: false }),
+    });
   }
   return signal.aborted ? [] : images;
 }

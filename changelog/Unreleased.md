@@ -1,3 +1,7 @@
+## New
+
+- Statblocks that name a finished token in a `token` property can become tokens from that image as it is: turn on **Use token images as they are** under Settings → Atlas VTT → Token import, and Create tokens → Fantasy Statblocks (and Create token from statblock image) takes the `token` image before `image`, whole and without the Atlas ring. Statblocks without a `token` image, or whose `token` names no image in the vault, use their `image` as before
+
 ## Improved
 
 - Number every cell of a square grid, the same way hex grids already could. A new Letters and numbers format (A1, B1, …) is available on square and hex grids alike

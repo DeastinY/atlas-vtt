@@ -4,6 +4,7 @@ import { resolveStatblockNote } from './statblockNoteSource';
 import type { TokenAsset } from './AssetService';
 import { tokenSizeFromCreatureSize } from '../pixi/token-renderer/tokenSizing';
 import { STATBLOCK_IMAGE_KEYS, type StatblockImageKey } from './statblockImageKeys';
+import { SettingsService } from './SettingsService';
 
 export type StatblockImportStatus = 'ready' | 'imported' | 'missing-image' | 'remote-image' | 'conflict';
 export interface StatblockImportCandidate {
@@ -12,11 +13,20 @@ export interface StatblockImportCandidate {
   status: StatblockImportStatus;
   detail: string;
   imagePath?: string;
+  /**
+   * `imagePath` is a finished token from the statblock's `token` property,
+   * created whole and without the Atlas ring. Only set while the
+   * "Use token images as they are" setting is on.
+   */
+  finishedToken?: boolean;
   layoutName?: string;
   showRing?: boolean;
   /** Default token footprint read from the creature's size, when it names one. */
   size?: number;
 }
+
+/** A URL rather than a vault path. */
+const REMOTE_REFERENCE = /^(?:[a-z][a-z0-9+.-]*:|\/\/)/i;
 
 /** Fantasy Statblocks hands out bestiary creatures with links encoded as `<STATBLOCK-WIKI-LINK>path|alias<STATBLOCK-WIKI-LINK>`. */
 const ENCODED_STATBLOCK_LINK = /^<STATBLOCK-(WIKI|MARKDOWN)-LINK>([\s\S]+?)(?:\|[\s\S]*)?<STATBLOCK-\1-LINK>$/;
@@ -82,8 +92,25 @@ export function statblockLookup(assets: readonly TokenAsset[], bestiary: readonl
   return { creatures, tokens };
 }
 
+/**
+ * The vault image a statblock's `token` property names: a finished token, often
+ * with its own frame. Null when the property is empty, a URL or a missing file,
+ * so the import falls back to the artwork fields.
+ */
+function finishedTokenImage(app: App, creature: Record<string, unknown>, sourcePath: string): TFile | null {
+  const reference = imageReference(creature.token);
+  return reference && !REMOTE_REFERENCE.test(reference) ? localImage(app, reference, sourcePath) : null;
+}
+
+export interface StatblockCandidateOptions {
+  /** Create tokens from a `token` property whole and without a ring, before `image`; defaults to the plugin setting. */
+  preferTokenField?: boolean;
+}
+
 /** Identity is always the note path; a matching basename is not proof of a statblock. */
-export async function statblockImportCandidate(app: App, file: TFile, lookup: StatblockLookup): Promise<StatblockImportCandidate | null> {
+export async function statblockImportCandidate(
+  app: App, file: TFile, lookup: StatblockLookup, options: StatblockCandidateOptions = {},
+): Promise<StatblockImportCandidate | null> {
   const path = normalizePath(file.path);
   const entry = lookup.creatures.get(path);
   const source = await resolveStatblockNote(app, file);
@@ -102,11 +129,17 @@ export async function statblockImportCandidate(app: App, file: TFile, lookup: St
   const existing = linked[0];
   if (existing) return { ...row, status: 'imported', detail: 'An Atlas token already links to this note.', imagePath: existing.imagePath, showRing: existing.showRing !== false };
   if (!creature) return { ...row, status: 'conflict', detail: 'The statblock could not be resolved. Check its name or note reference.' };
+  const size = tokenSizeFromCreatureSize(creature.size);
+  const sized = size !== undefined ? { size } : {};
+  const finishedToken = (options.preferTokenField ?? SettingsService.forApp(app)?.getSetting('preferTokenField') ?? false)
+    ? finishedTokenImage(app, creature, path) : null;
+  if (finishedToken) {
+    return { ...row, status: 'ready', detail: 'Ready to create a linked token from its token image.', imagePath: finishedToken.path, finishedToken: true, ...sized };
+  }
   const image = statblockImageField(creature)?.reference;
   if (!image) return { ...row, status: 'missing-image', detail: 'Add an image to this statblock to create a token.' };
-  if (/^(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(image)) return { ...row, status: 'remote-image', detail: 'Save the image in your vault and link it from the statblock.' };
+  if (REMOTE_REFERENCE.test(image)) return { ...row, status: 'remote-image', detail: 'Save the image in your vault and link it from the statblock.' };
   const imageFile = localImage(app, image, path);
   if (!imageFile) return { ...row, status: 'missing-image', detail: 'The linked image is missing or its format is unsupported.' };
-  const size = tokenSizeFromCreatureSize(creature.size);
-  return { ...row, status: 'ready', detail: 'Ready to create a linked token.', imagePath: imageFile.path, ...(size !== undefined && { size }) };
+  return { ...row, status: 'ready', detail: 'Ready to create a linked token.', imagePath: imageFile.path, ...sized };
 }
