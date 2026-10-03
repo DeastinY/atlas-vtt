@@ -51,6 +51,8 @@ export interface UploadOptions {
   thumbnail: boolean;
   /** A conversion started ahead of time, which jobs someone waits for may overtake. */
   background?: boolean;
+  /** Crop transparent margins first (unframed tokens; see the Token import setting). */
+  trim?: boolean;
 }
 
 /**
@@ -58,8 +60,10 @@ export interface UploadOptions {
  * card-sized copy: painting a full map in a preview card stalls the window.
  */
 export function optimizeUpload(file: File, mode: CreatorMode, options: UploadOptions): Promise<ProcessedImage> {
-  return shared(file, `fit:${mode}:${options.thumbnail}`, options.signal, (signal) => optimizeImage(file, IMAGE_PRESETS[mode], {
+  const trim = mode === 'token' && options.trim === true;
+  return shared(file, `fit:${mode}:${options.thumbnail}:${trim}`, options.signal, (signal) => optimizeImage(file, IMAGE_PRESETS[mode], {
     signal,
+    trim,
     thumbnail: options.thumbnail ? THUMBNAIL_SPEC : undefined,
     preview: mode === 'map' ? MAP_CARD_PREVIEW : undefined,
     background: options.background ?? false,
@@ -82,17 +86,17 @@ export function cropTokenImage(file: File, scale: number, position: ImagePositio
  * card, or the whole image of a map or unframed token. One decode serves both
  * the card and the save.
  */
-export function convertForPreview(file: File, mode: CreatorMode, framed: boolean, signal?: AbortSignal): Promise<ProcessedImage> {
+export function convertForPreview(file: File, mode: CreatorMode, framed: boolean, signal?: AbortSignal, trim = false): Promise<ProcessedImage> {
   if (mode === 'token' && framed) {
     const { imageScale, imagePosition } = cropReset({ file });
     return cropTokenImage(file, imageScale, imagePosition, signal, true);
   }
-  return optimizeUpload(file, mode, { signal, thumbnail: true, background: true });
+  return optimizeUpload(file, mode, { signal, thumbnail: true, background: true, trim });
 }
 
-/** Token art as the creator saves it by default: cropped to the circle when framed, whole otherwise. */
-export function convertTokenArt(file: File, framed: boolean, signal?: AbortSignal): Promise<ProcessedImage> {
+/** Token art as the creator saves it by default: cropped to the circle when framed, whole (`trim`med if asked) otherwise. */
+export function convertTokenArt(file: File, framed: boolean, signal?: AbortSignal, trim = false): Promise<ProcessedImage> {
   return framed
     ? cropTokenImage(file, 1, { x: 0, y: 0 }, signal)
-    : optimizeUpload(file, 'token', { signal, thumbnail: true });
+    : optimizeUpload(file, 'token', { signal, thumbnail: true, trim });
 }

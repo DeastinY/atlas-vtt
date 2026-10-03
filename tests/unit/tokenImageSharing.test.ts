@@ -4,14 +4,15 @@ import { statblockPreviewImages } from '../../src/app/packages/components/asset-
 import { createInMemoryApp } from '../mocks/inMemoryVault';
 
 const render = vi.hoisted(() => vi.fn());
+const optimize = vi.hoisted(() => vi.fn());
 vi.mock('../../src/app/imageProcessing/imageProcessing', () => ({
   IMAGE_PRESETS: { token: { maxWidth: 1024, quality: 0.9 }, map: { maxWidth: 4096, quality: 0.85 } },
-  optimizeImage: vi.fn(),
+  optimizeImage: optimize,
   renderFramedImage: render,
 }));
 vi.mock('../../src/app/services/AssetThumbnailService', () => ({ THUMBNAIL_SPEC: { size: 256, quality: 0.8 } }));
 
-const { cropTokenImage } = await import('../../src/app/packages/components/asset-manager/token-creator/tokenImages');
+const { convertTokenArt, cropTokenImage, optimizeUpload } = await import('../../src/app/packages/components/asset-manager/token-creator/tokenImages');
 
 const result = (name: string): ProcessedImage => ({ image: new Blob([name]), thumbnail: null, preview: null, sourcePreview: null });
 const abortable = (signal: AbortSignal | undefined, name: string): Promise<ProcessedImage> => new Promise((resolve, reject) => {
@@ -19,7 +20,7 @@ const abortable = (signal: AbortSignal | undefined, name: string): Promise<Proce
   setTimeout(() => resolve(result(name)), 0);
 });
 
-beforeEach(() => { render.mockReset(); });
+beforeEach(() => { render.mockReset(); optimize.mockReset(); });
 
 it('converts shared art once however many previews crop it alike', async () => {
   render.mockImplementation(async () => result('crop'));
@@ -58,4 +59,14 @@ it('reads art shared by several statblocks once, so its conversions are shared t
   expect(images[0]!.file).toBe(images[1]!.file);
   expect(images[2]!.file).not.toBe(images[0]!.file);
   expect(readBinary).toHaveBeenCalledTimes(2);
+});
+
+it('trims transparent margins only from unframed tokens that ask for it, and converts each way once', async () => {
+  optimize.mockImplementation(async () => result('whole'));
+  const art = new File(['art'], 'pirate.webp');
+  await convertTokenArt(art, false, undefined, true);
+  await convertTokenArt(art, false, undefined, true);
+  await convertTokenArt(art, false);
+  await optimizeUpload(new File(['map'], 'map.webp'), 'map', { thumbnail: true, trim: true });
+  expect(optimize.mock.calls.map(([, , options]: [File, unknown, { trim?: boolean }]) => options.trim)).toEqual([true, false, false]);
 });

@@ -9,6 +9,7 @@ import { vaultImageFile } from '../packages/components/asset-manager/token-creat
 import type { ProcessedImage } from '../imageProcessing/imageProcessing';
 import { convertTokenArt } from '../packages/components/asset-manager/token-creator/tokenImages';
 import { workSlices } from '../utils/workSlices';
+import { SettingsService } from './SettingsService';
 
 export interface StatblockImportItem {
   path: string;
@@ -115,7 +116,8 @@ export class StatblockTokenImportService {
       name = row.name;
       const image = this.app.vault.getAbstractFileByPath(row.imagePath);
       if (!(image instanceof TFile)) return { item: { path, name, status: 'skipped', message: 'The source image no longer exists.' } };
-      const converted = convertTokenArt(await vaultImageFile(this.app, image), showRing, signal);
+      const trim = SettingsService.forApp(this.app)?.getSetting('trimTokenPadding') ?? false;
+      const converted = convertTokenArt(await vaultImageFile(this.app, image), showRing, signal, trim);
       // Failures surface when the note is registered; notes never reached must not raise unhandled rejections.
       converted.catch(() => undefined);
       return { path, name, showRing, converted };

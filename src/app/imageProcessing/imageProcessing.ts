@@ -124,9 +124,15 @@ async function process(source: Blob, job: Omit<ImageJob, 'source'>, options: Pro
   }
 }
 
+export interface FitOptions extends ProcessOptions {
+  /** Crop transparent margins around the visible pixels first, e.g. token art padded for another VTT. */
+  trim?: boolean | undefined;
+}
+
 /** `source` scaled down to fit the preset and encoded as WebP. */
-export function optimizeImage(source: Blob, preset: ImagePreset, options: ProcessOptions = {}): Promise<ImageJobResult> {
-  return process(source, { layout: { kind: 'fit', maxWidth: preset.maxWidth, maxHeight: preset.maxHeight }, quality: preset.quality }, options);
+export function optimizeImage(source: Blob, preset: ImagePreset, options: FitOptions = {}): Promise<ImageJobResult> {
+  const layout = { kind: 'fit', maxWidth: preset.maxWidth, maxHeight: preset.maxHeight, ...(options.trim && { trim: true }) } as const;
+  return process(source, { layout, quality: preset.quality }, options);
 }
 
 export interface FrameOptions extends ProcessOptions {

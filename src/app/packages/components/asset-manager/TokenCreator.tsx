@@ -1,5 +1,6 @@
 import { AssetRegistrationUncertainError } from '../../../services/assetRegistrationRecovery';
 import { AssetService } from '../../../services/AssetService';
+import { SettingsService } from '../../../services/SettingsService';
 import { StatblockImportContent } from './statblock-import/StatblockImportContent';
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
@@ -39,7 +40,8 @@ function hasFiles(e: React.DragEvent): boolean {
 export function TokenCreator({ isOpen, onClose, mode = 'token', selectedCollection = AssetService.defaultCollectionId(), editToken, initialSource = 'images', onImportMaps }: TokenCreatorProps): React.JSX.Element | null {
   const { app } = useAtlasUI();
   const { assetService, collections } = useAssetCatalog(app, isOpen);
-  const previews = useTokenPreviews(mode);
+  const trimPadding = SettingsService.forApp(app)?.getSetting('trimTokenPadding') ?? false;
+  const previews = useTokenPreviews(mode, trimPadding);
   const [source, setSource] = useState(initialSource);
   const [importController, setImportController] = useState(() => new AbortController());
   const [importRunning, setImportRunning] = useState(false);
@@ -126,6 +128,7 @@ export function TokenCreator({ isOpen, onClose, mode = 'token', selectedCollecti
         signal: importController.signal,
         editToken: editToken ?? null,
         waitForOptimized: previews.waitForOptimized,
+        trimPadding,
         onProgress: reportSaveProgress,
       });
       if (saved > 0) app.workspace.trigger('atlas-vtt:refresh-assets');
@@ -138,7 +141,7 @@ export function TokenCreator({ isOpen, onClose, mode = 'token', selectedCollecti
       setIsSubmitting(false);
       clearSaveProgress();
     }
-  }, [usingStatblocks, app, assetService, canSubmit, collection, editToken, mode, onClose, previews, importController, reportSaveProgress, clearSaveProgress]);
+  }, [usingStatblocks, app, assetService, canSubmit, collection, editToken, mode, onClose, previews, importController, trimPadding, reportSaveProgress, clearSaveProgress]);
 
   useEffect(() => {
     if (!isOpen) return;

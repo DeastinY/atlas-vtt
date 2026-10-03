@@ -16,8 +16,11 @@ export interface FramePlacement {
 }
 
 export type ImageLayout =
-  /** The whole image, scaled down (never up) to fit within the bounds. */
-  | { kind: 'fit'; maxWidth: number; maxHeight: number }
+  /**
+   * The whole image, scaled down (never up) to fit within the bounds. With
+   * `trim`, transparent margins around the visible pixels are cropped first.
+   */
+  | { kind: 'fit'; maxWidth: number; maxHeight: number; trim?: boolean | undefined }
   /**
    * A square frame showing the image at `placement`; areas the image does not
    * cover stay transparent. The frame gets as many pixels as the source has

@@ -8,6 +8,8 @@ export interface SaveImageContext {
   mode: CreatorMode;
   /** The background conversion of a preview, if it produced `kind`. */
   waitForOptimized: (id: string, kind: PreviewConversionKind) => Promise<ProcessedImage | undefined>;
+  /** Crop transparent margins from unframed tokens. */
+  trimPadding?: boolean;
 }
 
 function isUntouchedCrop(preview: TokenPreview): boolean {
@@ -26,7 +28,7 @@ export async function prepareSaveImage(file: File, preview: TokenPreview, contex
     const background = isUntouchedCrop(preview) ? await context.waitForOptimized(preview.id, 'default-crop') : undefined;
     return background ?? cropTokenImage(file, preview.imageScale, preview.imagePosition, signal);
   }
-  return (await context.waitForOptimized(preview.id, 'whole')) ?? optimizeUpload(file, context.mode, { signal, thumbnail: true });
+  return (await context.waitForOptimized(preview.id, 'whole')) ?? optimizeUpload(file, context.mode, { signal, thumbnail: true, trim: context.trimPadding ?? false });
 }
 
 /**

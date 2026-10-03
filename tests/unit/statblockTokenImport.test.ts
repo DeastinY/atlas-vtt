@@ -3,6 +3,7 @@ import { TFile } from 'obsidian';
 import { StatblockTokenImportService } from '../../src/app/services/StatblockTokenImportService';
 import { AssetService } from '../../src/app/services/AssetService';
 import { TokenStatblockLinkService } from '../../src/app/services/TokenStatblockLinkService';
+import { SettingsService } from '../../src/app/services/SettingsService';
 import { createInMemoryApp } from '../mocks/inMemoryVault';
 
 // Workers and canvases do not exist in jsdom; the conversion itself is covered by the image pipeline's tests.
@@ -141,6 +142,17 @@ describe('bulk importing recognized statblock notes', () => {
     expect((await assets.getTokenAssets())[0]?.name).toBe('Customized Goblin');
     await assets.deleteAsset(tokens[0]!.id);
     expect(files.get(image)).toBe('image-bytes');
+  });
+
+  it('trims transparent margins from unframed artwork while the setting is on', async () => {
+    const { app, files, frontmatter, assets } = setup();
+    files.set('Next.md', 'Next');
+    frontmatter['Next.md'] = { ...frontmatter[note], name: 'Next' };
+    const importer = new StatblockTokenImportService(app, assets);
+    await importer.import([note], 'Default');
+    new SettingsService(app).setSetting('trimTokenPadding', true);
+    await importer.import(['Next.md'], 'Default');
+    expect(convert.mock.calls.map(([, framed, , trim]: [File, boolean, AbortSignal, boolean]) => [framed, trim])).toEqual([[false, false], [false, true]]);
   });
 
   it('revalidates deleted artwork, continues after individual failures and supports cancellation', async () => {

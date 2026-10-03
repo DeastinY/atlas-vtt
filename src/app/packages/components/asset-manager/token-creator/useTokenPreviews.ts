@@ -85,9 +85,10 @@ interface PendingOptimization {
  * conversion, selection and per-preview edits. Uploads are converted in
  * parallel by the image workers and their results reach the list in batches;
  * removing a preview cancels its conversion. Blob URLs are revoked when a
- * preview is removed or on unmount.
+ * preview is removed or on unmount. With `trimPadding`, unframed tokens lose
+ * their transparent margins.
  */
-export function useTokenPreviews(mode: CreatorMode): TokenPreviewsApi {
+export function useTokenPreviews(mode: CreatorMode, trimPadding = false): TokenPreviewsApi {
   const [defaultRing, setDefaultRing] = useState(true);
   const [previews, setPreviews] = useState<TokenPreview[]>([]);
   const previewsRef = useRef(previews);
@@ -167,7 +168,7 @@ export function useTokenPreviews(mode: CreatorMode): TokenPreviewsApi {
     const { file } = preview;
     if (!file) return undefined;
     try {
-      const result = await convertForPreview(file, mode, framed, signal);
+      const result = await convertForPreview(file, mode, framed, signal, trimPadding);
       if (!signal.aborted && liveIds.current.has(preview.id)) {
         queuePatch(preview.id, {
           compressionRatio: Math.round((1 - result.image.size / file.size) * 100),
@@ -184,7 +185,7 @@ export function useTokenPreviews(mode: CreatorMode): TokenPreviewsApi {
       if (liveIds.current.has(preview.id)) queuePatch(preview.id, { previewUrl: URL.createObjectURL(file), isOptimizing: false });
       return undefined;
     }
-  }, [mode, queuePatch]);
+  }, [mode, trimPadding, queuePatch]);
 
   const addImages = useCallback((images: PreviewImage[]): void => {
     const paths = new Set(previewsRef.current.flatMap(p => p.statblockPath ? [p.statblockPath] : []));

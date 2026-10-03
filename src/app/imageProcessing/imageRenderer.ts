@@ -1,5 +1,6 @@
 import type { ImageJob, ImageJobResult, ImageLayout, ThumbnailSpec } from './imageJob';
 import { fitWithin, frameImageRect, frameSize, scaleDown, type Size } from './imageLayout';
+import { measuredPaddingCrop } from './transparentPadding';
 
 /**
  * Runs inside an image worker: one decode per job, scaling on a 2D canvas,
@@ -118,6 +119,23 @@ async function keepsSource(layout: ImageLayout, source: Blob, bitmap: ImageBitma
   return layout.kind === 'fit' && bitmap.width <= layout.maxWidth && bitmap.height <= layout.maxHeight && isWebp(source);
 }
 
+/** Longer side of the copy transparent margins are measured on; a few pixels of slack do not show on a token. */
+const PADDING_PROBE_SIZE = 256;
+
+/**
+ * `bitmap` without its transparent margins, or null when it has none worth
+ * cropping. The margins are measured on a small copy.
+ */
+async function trimmedBitmap(bitmap: ImageBitmap): Promise<ImageBitmap | null> {
+  const probeSize = fitWithin(bitmap, PADDING_PROBE_SIZE, PADDING_PROBE_SIZE);
+  const probe = new OffscreenCanvas(probeSize.width, probeSize.height);
+  const ctx = probe.getContext('2d', { willReadFrequently: true });
+  if (!ctx) return null;
+  ctx.drawImage(bitmap, 0, 0, probe.width, probe.height);
+  const crop = measuredPaddingCrop(ctx.getImageData(0, 0, probe.width, probe.height), probe.width / bitmap.width, bitmap);
+  return crop && createImageBitmap(bitmap, crop.left, crop.top, crop.width, crop.height);
+}
+
 function render(bitmap: ImageBitmap, layout: ImageLayout): OffscreenCanvas {
   return layout.kind === 'fit'
     ? renderFit(bitmap, fitWithin(bitmap, layout.maxWidth, layout.maxHeight))
@@ -125,10 +143,16 @@ function render(bitmap: ImageBitmap, layout: ImageLayout): OffscreenCanvas {
 }
 
 export async function renderImageJob(job: ImageJob): Promise<ImageJobResult> {
-  const bitmap = await decode(job.source);
+  const decoded = await decode(job.source);
+  let bitmap = decoded;
   try {
+    const trimmed = job.layout.kind === 'fit' && job.layout.trim ? await trimmedBitmap(decoded) : null;
+    if (trimmed) {
+      decoded.close();
+      bitmap = trimmed;
+    }
     const sourcePreview = await renderCopy(bitmap, job.sourcePreview);
-    if (job.source instanceof Blob && await keepsSource(job.layout, job.source, bitmap)) {
+    if (!trimmed && job.source instanceof Blob && await keepsSource(job.layout, job.source, bitmap)) {
       return { image: job.source, sourcePreview, ...await renderCopies(bitmap, job) };
     }
     const canvas = render(bitmap, job.layout);
@@ -138,5 +162,6 @@ export async function renderImageJob(job: ImageJob): Promise<ImageJobResult> {
     return { image: await encode(canvas, job.quality), sourcePreview, ...await renderCopies(canvas, job), scaledDown };
   } finally {
     bitmap.close();
+    decoded.close();
   }
 }

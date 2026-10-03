@@ -1,3 +1,7 @@
+## New
+
+- Token art padded for another VTT, a creature in a large transparent canvas, can fill its token: turn on **Trim transparent borders** under Settings → Atlas VTT → Token import, and tokens created without the Atlas ring (from uploads, Fantasy Statblocks or Create token from statblock image) lose the transparent space around their art. The art stays centred, and nothing visible is cut
+
 ## Improved
 
 - Number every cell of a square grid, the same way hex grids already could. A new Letters and numbers format (A1, B1, …) is available on square and hex grids alike

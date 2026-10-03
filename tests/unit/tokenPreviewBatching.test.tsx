@@ -47,7 +47,7 @@ it('shows the whole image on the card and keeps the default crop for saving', as
   act(() => hook.current.addFiles(files(1)));
   await act(async () => { await vi.advanceTimersByTimeAsync(200); });
   const [preview] = hook.current.previews;
-  expect(convert).toHaveBeenCalledWith(preview!.file, 'token', true, expect.any(AbortSignal));
+  expect(convert).toHaveBeenCalledWith(preview!.file, 'token', true, expect.any(AbortSignal), false);
   expect(URL.createObjectURL).toHaveBeenCalledWith(converted.sourcePreview);
   expect(await hook.current.waitForOptimized(preview!.id, 'default-crop')).toBe(converted);
   expect(await hook.current.waitForOptimized(preview!.id, 'whole')).toBeUndefined();
