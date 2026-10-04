@@ -124,3 +124,44 @@ it('trashes the files of a batch the index refuses, and keeps them when the writ
   await expect(saveTokenPreviews(options)).rejects.toBeInstanceOf(AssetRegistrationUncertainError);
   expect([...files.keys()].filter(path => path.endsWith('.webp'))).toHaveLength(2);
 });
+
+it('writes several previews at once and still registers them in preview order', async () => {
+  const { app, files, assets } = setup();
+  const waiting: Array<() => void> = [];
+  app.vault.createBinary = vi.fn((path: string, data: ArrayBuffer) => new Promise<void>((resolve) => {
+    waiting.push(() => { files.set(path, new TextDecoder().decode(data)); resolve(); });
+  }));
+  const previews = ['goblin', 'wolf', 'bat'].map(id => preview(id));
+  const saving = saveTokenPreviews({ app, assetService: assets, mode: 'token', previews, collection: 'Default', tags: [], waitForOptimized: async (id) => converted(id) });
+  // All three image writes are under way before any of them finished
+  await vi.waitFor(() => expect(waiting).toHaveLength(3));
+  while (waiting.length > 0) {
+    waiting.pop()!();
+    await new Promise(resolve => window.setTimeout(resolve, 0));
+  }
+  expect(await saving).toBe(3);
+  expect((await assets.getTokenAssets()).map(t => t.name)).toEqual(['goblin', 'wolf', 'bat']);
+});
+
+it('creates the missing assets folder once when the first previews are written together', async () => {
+  const { app, assets } = setup();
+  const vault = app.vault as { createFolder: (path: string) => Promise<unknown> };
+  const create = vault.createFolder.bind(vault);
+  // A real vault creates folders on disk: a second writer may look before the first one is done
+  vault.createFolder = vi.fn(async (path: string) => {
+    await new Promise(resolve => window.setTimeout(resolve, 0));
+    return create(path);
+  });
+  const previews = ['goblin', 'wolf', 'bat'].map(id => preview(id));
+  expect(await saveTokenPreviews({ app, assetService: assets, mode: 'token', previews, collection: 'Default', tags: [], waitForOptimized: async (id) => converted(id) })).toBe(3);
+});
+
+it('trashes the previews written after a batch whose registration may have landed', async () => {
+  const { app, files, assets } = setup();
+  const previews = Array.from({ length: 150 }, (_, index) => preview(`token-${index}`));
+  vi.spyOn(assets, 'addAssets').mockRejectedValueOnce(new AssetRegistrationUncertainError());
+  await expect(saveTokenPreviews({ app, assetService: assets, mode: 'token', previews, collection: 'Default', tags: [], waitForOptimized: async (id) => converted(id) }))
+    .rejects.toBeInstanceOf(AssetRegistrationUncertainError);
+  // The hundred previews of the uncertain batch keep their image and thumbnail; none written after it stay
+  expect([...files.keys()].filter(path => path.endsWith('.webp'))).toHaveLength(200);
+});

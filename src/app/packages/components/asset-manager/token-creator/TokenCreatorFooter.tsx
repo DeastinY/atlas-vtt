@@ -3,6 +3,7 @@ import { Loader2, Save } from 'lucide-react';
 import { Platform } from 'obsidian';
 import { Button } from '../../primitives/button';
 import { ProgressStatus } from '../../primitives/ProgressStatus';
+import { useFrameProgressValue, type FrameProgress } from '../../primitives/useFrameProgress';
 import type { ProgressCount, ProgressTask } from '../../primitives/useLingeringTask';
 import { modeNoun, type CreatorMode } from './types';
 
@@ -13,8 +14,8 @@ interface TokenCreatorFooterProps {
   saveError: string;
   /** Conversion of the images added last, while it runs. */
   optimization: ProgressCount | null;
-  /** Saving, while it runs. */
-  saving: ProgressCount | null;
+  /** Saving, while it runs: its progress, and how many it saves until the first step is reported. */
+  saving: { progress: FrameProgress; total: number } | null;
   canSubmit: boolean;
   onCancel: () => void;
   onSubmit: () => void;
@@ -28,8 +29,9 @@ function savingLabel(mode: CreatorMode, isEditing: boolean): string {
 /** Status, progress and actions of the token creator. */
 export function TokenCreatorFooter({ mode, isEditing, count, saveError, optimization, saving, canSubmit, onCancel, onSubmit }: TokenCreatorFooterProps): React.JSX.Element {
   const isSubmitting = saving !== null;
+  const saved = useFrameProgressValue(saving?.progress ?? null);
   const task: ProgressTask | null = saving
-    ? { label: savingLabel(mode, isEditing), ...saving }
+    ? { label: savingLabel(mode, isEditing), ...(saved ?? { done: 0, total: saving.total }) }
     : optimization ? { label: 'Optimizing images', ...optimization } : null;
   const submitLabel = isEditing ? 'Update' : 'Create';
   return (

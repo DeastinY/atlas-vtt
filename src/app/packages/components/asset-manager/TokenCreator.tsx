@@ -16,7 +16,7 @@ import { saveTokenPreviews } from './token-creator/saveTokenPreviews';
 import { useAssetCatalog } from './token-creator/useAssetCatalog';
 import { useAssetTags } from './token-creator/useAssetTags';
 import { useTokenPreviews } from './token-creator/useTokenPreviews';
-import { useFrameProgress } from '../primitives/useFrameProgress';
+import { FrameProgress } from '../primitives/useFrameProgress';
 import { modeNoun } from './token-creator/types';
 import { uvttFilesAmong, type ImportMaps } from './hooks/useUvttImport';
 import type { CreatorMode, EditTokenInput } from './token-creator/types';
@@ -54,8 +54,10 @@ export function TokenCreator({ isOpen, onClose, mode = 'token', selectedCollecti
   const [saveError, setSaveError] = useState('');
   const [saveBlocked, setSaveBlocked] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // Saving reports every preview; the footer shows it at most once a frame
-  const { progress: saveProgress, report: reportSaveProgress, clear: clearSaveProgress } = useFrameProgress();
+  // Saving reports every preview; only the footer shows it, at most once a frame, so the previews do not render along
+  const [saveProgress] = useState(() => new FrameProgress());
+  useEffect(() => saveProgress.cancel, [saveProgress]);
+  const { report: reportSaveProgress, clear: clearSaveProgress } = saveProgress;
   const [isDragging, setIsDragging] = useState(false);
   const [previewPane, setPreviewPane] = useState<HTMLDivElement | null>(null);
   const dragDepthRef = useRef(0);
@@ -258,7 +260,7 @@ export function TokenCreator({ isOpen, onClose, mode = 'token', selectedCollecti
             count={count}
             saveError={saveError}
             optimization={previews.optimization}
-            saving={isSubmitting ? saveProgress ?? { done: 0, total: previews.previews.length } : null}
+            saving={isSubmitting ? { progress: saveProgress, total: previews.previews.length } : null}
             canSubmit={canSubmit}
             onCancel={onClose}
             onSubmit={() => { void handleSubmit(); }}

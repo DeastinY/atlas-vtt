@@ -1,5 +1,6 @@
 ## Improved
 
+- Large token imports finish sooner. Images are converted on more of your processor's cores, and saving no longer redraws every preview while it reports progress. A Fantasy Statblocks import of 6,400 creatures went from about 98 to 82 seconds
 - Number every cell of a square grid, the same way hex grids already could. A new Letters and numbers format (A1, B1, …) is available on square and hex grids alike
 - An open map uses much less graphics memory: 3D dice share one drawing context per window, and with dynamic lighting on the map no longer keeps antialiasing buffers it does not draw into
 

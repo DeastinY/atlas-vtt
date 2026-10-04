@@ -26,6 +26,8 @@ export interface SaveTokenPreviewsOptions extends SaveImageContext {
 
 /** Previews registered with one save of the asset index (see `AssetService.addAssets`); 6,000 tokens saved one by one wrote about 20 GB. */
 const REGISTER_BATCH = 100;
+/** Previews whose files are written at the same time. */
+const WRITE_CONCURRENCY = 8;
 
 /** A preview whose files are written, waiting for its batch to be registered. */
 interface WrittenPreview {
@@ -123,21 +125,34 @@ async function savePreviews(options: SaveTokenPreviewsOptions): Promise<number> 
   };
 
   options.onProgress?.(done, prepared.size);
+  // Writes overlap, so the vault's work on each new file fills the time another write waits for the disk; assets register in preview order.
+  const inFlight: Promise<WrittenPreview | null>[] = [];
+  let batch: WrittenPreview[] = [];
+  const settleOldest = async (): Promise<void> => {
+    const written = await inFlight.shift();
+    if (written) batch.push(written);
+    if (batch.length >= REGISTER_BATCH) {
+      const full = batch;
+      batch = [];
+      await register(full);
+    }
+  };
   try {
-    let batch: WrittenPreview[] = [];
     for (const preview of previews) {
       if (options.signal?.aborted) break;
       const pending = prepared.get(preview.id);
       if (!pending) continue;
-      const written = await write(preview, pending);
-      if (written) batch.push(written);
-      if (batch.length >= REGISTER_BATCH) {
-        await register(batch);
-        batch = [];
-      }
+      inFlight.push(write(preview, pending));
+      if (inFlight.length >= WRITE_CONCURRENCY) await settleOldest();
     }
-    await register(batch);
+    while (inFlight.length > 0) await settleOldest();
+    const last = batch;
+    batch = [];
+    await register(last);
   } finally {
+    // After a failed registration, previews written meanwhile are never registered: their files go.
+    const unregistered = [...batch, ...(await Promise.all(inFlight.splice(0))).filter(w => w !== null)];
+    if (unregistered.length > 0) await discardAssetFiles(app, unregistered.flatMap(w => w.discard));
     options.signal?.removeEventListener('abort', stopConversion);
     conversion.abort();
     if (saved) app.workspace.trigger('atlas-vtt:refresh-assets');

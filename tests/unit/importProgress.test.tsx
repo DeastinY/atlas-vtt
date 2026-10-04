@@ -3,7 +3,7 @@ import { act, cleanup, render, renderHook, screen } from '@testing-library/react
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProgressBar } from '../../src/app/packages/components/primitives/ProgressBar';
 import { ProgressStatus } from '../../src/app/packages/components/primitives/ProgressStatus';
-import { useFrameProgress } from '../../src/app/packages/components/primitives/useFrameProgress';
+import { FrameProgress, useFrameProgress, useFrameProgressValue } from '../../src/app/packages/components/primitives/useFrameProgress';
 import { useLingeringTask, type ProgressTask } from '../../src/app/packages/components/primitives/useLingeringTask';
 import { useBatchProgress } from '../../src/app/packages/components/asset-manager/token-creator/useBatchProgress';
 
@@ -102,5 +102,27 @@ describe('useFrameProgress', () => {
     act(() => { vi.advanceTimersToNextFrame(); });
     expect(result.current.progress).toEqual({ done: 999, total: 6719 });
     expect(renders - before).toBe(1);
+  });
+
+  it('renders only the components that read shared progress', () => {
+    const progress = new FrameProgress();
+    let parentRenders = 0;
+    let readerRenders = 0;
+    function Reader(): React.JSX.Element {
+      readerRenders += 1;
+      const count = useFrameProgressValue(progress);
+      return <span>{count ? `${count.done} of ${count.total}` : 'idle'}</span>;
+    }
+    function Parent(): React.JSX.Element {
+      parentRenders += 1;
+      return <Reader />;
+    }
+    render(<Parent />);
+    act(() => { for (let i = 1; i <= 1000; i++) progress.report(i, 6426); });
+    act(() => { vi.advanceTimersToNextFrame(); });
+    expect(screen.getByText('1000 of 6426')).toBeTruthy();
+    expect([parentRenders, readerRenders]).toEqual([1, 2]);
+    act(() => progress.clear());
+    expect(screen.getByText('idle')).toBeTruthy();
   });
 });
